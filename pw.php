@@ -83,21 +83,35 @@ class PW {
 		}
 
 		// mandatory settings
-		if (self::$settings->noHashedKey) {
-			echo "No master password.\n";
-			self::saveKey(self::getKey());
-		}
-
 		if (self::$settings->invHashedKey) {
 			echo "Invalid key.\n";
 			die();
 		}
+
+		if (self::$settings->noHashedKey) {
+			echo "No master password.\n";
+			$hash = self::getKey();
+			$file = self::splitDataNeedle(self::$settings->keyNeedle);
+			$code = $file[0] . $hash . $file[1];
+			self::saveFile("pw.php", $code);
+		} else {
+			$hash = self::getDataNeedle(self::$settings->keyNeedle);
+			self::$settings->key = $hash;
+		}
+
 	}
 	private static function getDataNeedle ($needle) {
 		$data = array();
 		$data[0] = strposAll(self::$settings->code, $needle);
 		$data[1] = substr(self::$settings->code, $data[0][0] + strlen($needle) + 1, $data[0][1] - ($data[0][0] + strlen($needle) + 2));
 		return $data[1];
+	}
+	private static function splitDataNeedle ($needle) {
+		$data = array();
+		$split = strpos(self::$settings->code, $needle) + strlen($needle) + 1;
+		$data[0] = substr(self::$settings->code, 0, $split);
+		$data[1] = substr(self::$settings->code, $split);
+		return $data;
 	}
 	private static function getKey () {
 
@@ -113,69 +127,101 @@ class PW {
 
 		return $hash;
 	}
-	private static function saveKey ($hash) {
-		if (self::$settings->noHashedKey) {
-
-			$split = strpos(self::$settings->code, self::$settings->keyNeedle) + strlen(self::$settings->keyNeedle) + 1;
-			$start = substr(self::$settings->code, 0, $split);
-			$endin = substr(self::$settings->code, $split);
-			
-			$code = $start . $hash . $endin;
-
-			$file = fopen("pw.php", "w");
-			fwrite($file, $code);
-			fclose($file);
-
-		} else {
-			echo "wanted to save key but was not allowed\n";
-		}
-	}
 	public static function newPassword () {
 
 		if (self::$settings->noTypes) {
 			echo "\nThere are no types.\n\n";
 		} else {
-			self::showTypes();
+			echo "\n".self::showTypes()."\n\n";
 		}
 
 		$type = readline("Enter type: ");
-		self::processType($type);
+		$type = self::processType($type);
 
-		// check whether type is given else create new
-
-		// $password = trim(fgets(STDIN));
-
-		// $split = strpos(self::$settings->code, self::$settings->pwNeedle) + strlen(self::$settings->pwNeedle) + 1;
-		// $start = substr(self::$settings->code, 0, $split);
-		// $endin = substr(self::$settings->code, $split);
+		echo $type;
+		echo "\n";
 
 	}
 	public static function showTypes () {
-
+		$types = unserialize(self::decrypt(self::getDataNeedle(self::$settings->typeNeedle)));
+		$echo = '';
+		foreach ($types as $type) {
+			$echo .= $type . "\t";
+		}
+		return $echo;
 	}
 	private static function processType ($type) {
-		echo self::getDataNeedle(self::$settings->typeNeedle);
-		// use encdec here
+		$useType = null;
+		if (self::$settings->noTypes) {
+			$arr = array();
+			$arr[0] = $type;
+			$enc = self::encrypt(serialize($arr));
+			self::saveData(self::$settings->typeNeedle, $enc);
+		} else {
+			$savedTypes = unserialize(self::decrypt(self::getDataNeedle(self::$settings->typeNeedle)));
+			foreach ($savedTypes as $savedType) {
+				if ($type == $savedType) {
+					$useType = $type;
+					break;
+				}
+			}
+
+			if ($useType != $type) {
+				$savedTypes[] = $type;
+				$enc = self::encrypt(serialize($savedTypes));
+				self::saveData(self::$settings->typeNeedle, $enc);
+			}
+		}
+
+		return $useType;
 	}
-	private static function decrypt ($string, $key) {
-	  $string = str_split($string);
-	  $key = str_split($key);
-	  $message = "";
-	  $keyUnit = 0;
-	  $keyLength = count($key);
-	  foreach ($string as $k => $char) {
-	    $num = abs(ord($char) - self::$settings->addMax) - ord($key[$keyUnit]);
-	    $message .= chr($num);
-	    $keyUnit++;
-	    if($keyUnit == $keyLength){
-	      $keyUnit = 0;
-	    }
-	  }
-	  return $message;
+	private static function decrypt ($string) {
+		$string = str_split($string);
+		$key = str_split(self::$settings->key);
+		$message = "";
+		$keyUnit = 0;
+		$keyLength = count($key);
+		foreach ($string as $k => $char) {
+			$num = abs(ord($char) - 444) - ord($key[$keyUnit]);
+			$message .= chr($num);
+			$keyUnit++;
+			if($keyUnit == $keyLength){
+				$keyUnit = 0;
+			}
+		}
+		return $message;
+	}
+	private static function encrypt ($string) {
+		$string = str_split($string);
+		$key = str_split(self::$settings->key);
+		$secretString = '';
+		$keyUnit = 0;
+		$keyLength = count($key);
+		foreach ($string as $k => $char) {
+			$num = abs((ord($char) + ord($key[$keyUnit])) - 444);
+			$secretString .= chr($num);
+			$keyUnit++;
+			if ($keyUnit == $keyLength) {
+				$keyUnit = 0;
+			}
+		}
+		return $secretString;
+	}
+	private static function saveData ($needle, $data) {
+		$file = self::splitDataNeedle($needle);
+		$code = $file[0] . $data . $file[1];
+		self::saveFile("pw.php", $code);
+	}
+	private static function saveFile ($fileName, $string) {
+		$file = fopen($fileName, "w");
+		fwrite($file, $string);
+		fclose($file);
 	}
 }
 
 
+// TODO
+// remove hashed key from this file
 
 // save pw here. use password as key
 // http://stackoverflow.com/questions/4081403/how-does-password-based-encryption-technically-work
