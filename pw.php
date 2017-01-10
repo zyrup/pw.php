@@ -1,37 +1,56 @@
 <?php
 
 /*
-~HASHED KEY~
 
-~HASHED KEY~
+~DATA~
 
-~PASSWORD HASH1212~
+~DATA~
 
-~PASSWORD HASH1212~
-
-~TYPE~
-
-~TYPE~
-
-~SUBTYPE~
-
-~SUBTYPE~
+TODO
+- input validation when inserting in data
 
 */
 
-PW::init();
-
-foreach ($argv as $arg) {
-	// check for help arg
-	if ($arg == 'pw' && !PW::$settings->arg1) {
-		PW::$settings->arg1 = true;
+// ignore any given arguments except help
+if (isset($argv[1])) {
+	if ($argv[1] == 'help') {
+		echo "Type 'php pw.php xxx' in order to XXX.\n";
+		echo "Type 'php pw.php xxx' in order to XXX.\n";
+		echo "Type 'php pw.php xxx' in order to XXX.\n";
+		echo "You can adjust settings in pw.php in the init() function.\n";
+		die();
 	}
 }
 
-PW::checkToolStatus();
+$strings = (object) [
+	'bar' => "::::::::::::::::::::::::::::::::::::::\n\n"
+];
+// ANSI colors http://bitmote.com/index.php?post/2012/11/19/Using-ANSI-Color-Codes-to-Colorize-Your-Bash-Prompt-on-Linux
 
-if (PW::$settings->arg1) {
-	PW::newPassword();	
+PW::init();
+while (true) {
+	$input = trim(fgets(STDIN));
+
+	if ($input) {
+
+		if (PW::$settings->managerMode == 'ne') {
+			PW::saveEntity($input);
+		}
+
+		if (PW::$settings->managerMode == '') {
+			if ($input == 'ne') {
+				PW::$settings->managerMode = 'ne';
+				PW::saveEntityMenu();
+			}
+			if ($input == 'le') {
+				PW::$settings->managerMode = 'le';
+				PW::listEntities();
+			}
+		}
+
+	}
+
+
 }
 
 function strposAll ($haystack, $needle) {
@@ -48,57 +67,119 @@ class PW {
 	public static $settings;
 	public static function init () {
 		self::$settings = (object) [
-			'arg1' => false,
-			'keyNeedle' => '~HASHED KEY~',
-			'typeNeedle' => '~TYPE~',
-			'subtypeNeedle' => '~SUBTYPE~',
-			'noHashedKey' => false,
-			'invHashedKey' => false,
-			'noTypes' => false,
-			'noSubtypes' => false,
-			'key' => ''
+			'code' => null,
+			'data' => null,
+			'key' => null,
+			'dataBool' => false,
+			'status' => null,
+			'managerMode' => ''
+		];
+		self::$settings->code = file_get_contents(__FILE__);
+		self::$settings->dataBool = strlen(self::getDataNeedle('~DATA~'));
+
+		self::toolChecking();
+
+		self::listOptions();
+
+		// echo "\033[38;5;208mee = edit entities\033[0;00m\n";
+		// print_r(self::$settings->data);
+
+	}
+	public static function initOLD () {
+		self::$settings = (object) [
+			'arg' => array(
+				0 => false
+			),
+			'status' => array(
+				0 => false
+			),
+			'code' => '',
+			'key' => '',
+			'data' => null
 		];
 	}
-	public static function checkToolStatus () {
-		self::$settings->code = file_get_contents('pw.php');
+	public static function toolChecking () {
+		global $strings;
+		$options = '';
 
-		// check for hashed key
-		$hashedKeyLength = strlen(self::getDataNeedle(self::$settings->keyNeedle));
-		if ($hashedKeyLength == 0) {
-			self::$settings->noHashedKey = true;
-		} else if ( $hashedKeyLength > 255 || $hashedKeyLength < 255) {
-			self::$settings->invHashedKey = true;
+		// first check if there is data
+
+
+		system('clear');
+		echo $strings->bar;
+
+		if (self::$settings->dataBool == 0) {
+			echo "Status: \033[38;5;40mWelcome!\033[0;00m\n";
+		}
+		if (self::$settings->key == null) {
+			echo "Status: \033[38;5;40mNo password given\033[0;00m\n\n";
+			PW::$settings->managerMode = 'pw';
+			self::$settings->key = self::getKey();
+			PW::$settings->managerMode = '';
+			PW::toolChecking();
+			return;
 		}
 
-		// check for type
-		$typeLength = strlen(self::getDataNeedle(self::$settings->typeNeedle));
-		if ($typeLength == 0) {
-			self::$settings->noTypes = true;
+		if (self::$settings->key != null && self::$settings->dataBool == 0) {
+			$data = (object) [
+				'entity' => array(),
+				'type' => array(),
+				'text' => array(),
+				'entity_has_type' => array(),
+				'type_has_text' => array()
+			];
+			$enc = self::encrypt(serialize($data));
+			self::saveData('~DATA~', $enc);
+			self::$settings->dataBool = true;
 		}
 
-		// check for subtype
-		$typeLength = strlen(self::getDataNeedle(self::$settings->subtypeNeedle));
-		if ($typeLength == 0) {
-			self::$settings->noSubtypes = true;
+		if (self::$settings->key != null && self::$settings->dataBool) {
+			self::$settings->data = unserialize(self::decrypt(self::getDataNeedle('~DATA~')));
+			self::$settings->status = 'ready';
 		}
 
-		// mandatory settings
-		if (self::$settings->invHashedKey) {
-			echo "Invalid key.\n";
-			die();
-		}
+	}
+	public static function listOptions () {
+		$options = '';
+		if (self::$settings->status == 'ready') {
+			$options .= "\033[38;5;208mne = create new entity\033[0;00m\n";
+			$options .= "\033[38;5;208mnt = create new type\033[0;00m\n";
+			$options .= "\033[38;5;208mnx = create new text\033[0;00m\n";
+			$options .= "\033[38;5;208mle = list entities\033[0;00m\n";
 
-		if (self::$settings->noHashedKey) {
-			echo "No master password.\n";
-			$hash = self::getKey();
-			$file = self::splitDataNeedle(self::$settings->keyNeedle);
-			$code = $file[0] . $hash . $file[1];
-			self::saveFile("pw.php", $code);
-		} else {
-			$hash = self::getDataNeedle(self::$settings->keyNeedle);
-			self::$settings->key = $hash;
+			echo "What would you like to do?\n";
+			echo $options;
 		}
-
+	}
+	public static function saveEntityMenu () {
+		global $strings;
+		system('clear');
+		echo $strings->bar;
+		echo "Insert the name of your new entity:\n";
+	}
+	public static function saveEntity ($name) {
+		$entities = self::$settings->data->entity;
+		$pass = true;
+		foreach ($entities as $entity) {
+			if ($entity == $name) {
+				$pass = false;
+				echo "Sorry, this entity is already taken\n";
+				return;
+			}
+		}
+		if ($pass) {
+			self::$settings->data->entity[] = $name;
+			$enc = self::encrypt(serialize(self::$settings->data));
+			self::saveData('~DATA~', $enc);
+			echo "A new entity {$name} has been created\n";
+			PW::$settings->managerMode = '';
+		}
+	}
+	public static function listEntities () {
+		$entities = self::$settings->data->entity;
+		foreach ($entities as $entity) {
+			echo "{$entity}\n";
+		}
 	}
 	private static function getDataNeedle ($needle) {
 		$data = array();
@@ -114,7 +195,6 @@ class PW {
 		return $data;
 	}
 	private static function getKey () {
-
 		echo "Please enter your master password:\n";
 		system('stty -echo'); // stop showing characters in terminal
 		$password = trim(fgets(STDIN));
@@ -126,54 +206,6 @@ class PW {
 		$hash = hash_pbkdf2("sha256", $password, '', $iterations, $hashLength); // using without salt
 
 		return $hash;
-	}
-	public static function newPassword () {
-
-		if (self::$settings->noTypes) {
-			echo "\nThere are no types.\n\n";
-		} else {
-			echo "\n".self::showTypes()."\n\n";
-		}
-
-		$type = readline("Enter type: ");
-		$type = self::processType($type);
-
-		echo $type;
-		echo "\n";
-
-	}
-	public static function showTypes () {
-		$types = unserialize(self::decrypt(self::getDataNeedle(self::$settings->typeNeedle)));
-		$echo = '';
-		foreach ($types as $type) {
-			$echo .= $type . "\t";
-		}
-		return $echo;
-	}
-	private static function processType ($type) {
-		$useType = null;
-		if (self::$settings->noTypes) {
-			$arr = array();
-			$arr[0] = $type;
-			$enc = self::encrypt(serialize($arr));
-			self::saveData(self::$settings->typeNeedle, $enc);
-		} else {
-			$savedTypes = unserialize(self::decrypt(self::getDataNeedle(self::$settings->typeNeedle)));
-			foreach ($savedTypes as $savedType) {
-				if ($type == $savedType) {
-					$useType = $type;
-					break;
-				}
-			}
-
-			if ($useType != $type) {
-				$savedTypes[] = $type;
-				$enc = self::encrypt(serialize($savedTypes));
-				self::saveData(self::$settings->typeNeedle, $enc);
-			}
-		}
-
-		return $useType;
 	}
 	private static function decrypt ($string) {
 		$string = str_split($string);
@@ -210,7 +242,8 @@ class PW {
 	private static function saveData ($needle, $data) {
 		$file = self::splitDataNeedle($needle);
 		$code = $file[0] . $data . $file[1];
-		self::saveFile("pw.php", $code);
+		self::saveFile(__FILE__, $code);
+		self::$settings->code = file_get_contents(__FILE__);
 	}
 	private static function saveFile ($fileName, $string) {
 		$file = fopen($fileName, "w");
