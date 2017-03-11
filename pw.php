@@ -6,51 +6,25 @@
 
 ~DATA~
 
-TODO
-- input validation when inserting in data
-
 */
 
-// ignore any given arguments except help
-if (isset($argv[1])) {
-	if ($argv[1] == 'help') {
-		echo "Type 'php pw.php xxx' in order to XXX.\n";
-		echo "Type 'php pw.php xxx' in order to XXX.\n";
-		echo "Type 'php pw.php xxx' in order to XXX.\n";
-		echo "You can adjust settings in pw.php in the init() function.\n";
-		die();
-	}
-}
-
-$strings = (object) [
-	'bar' => "::::::::::::::::::::::::::::::::::::::\n\n"
-];
 // ANSI colors http://bitmote.com/index.php?post/2012/11/19/Using-ANSI-Color-Codes-to-Colorize-Your-Bash-Prompt-on-Linux
 
-PW::init();
-while (true) {
-	$input = trim(fgets(STDIN));
-
-	if ($input) {
-
-		if (PW::$settings->managerMode == 'ne') {
-			PW::saveEntity($input);
-		}
-
-		if (PW::$settings->managerMode == '') {
-			if ($input == 'ne') {
-				PW::$settings->managerMode = 'ne';
-				PW::saveEntityMenu();
-			}
-			if ($input == 'le') {
-				PW::$settings->managerMode = 'le';
-				PW::listEntities();
-			}
-		}
-
+if (isset($argv[1])) {
+	$arg1 = $argv[1];
+	if ($arg1 == 'help') {
+		PW::showHelp();
+	} else if (
+		$arg1 == 'import' ||
+		$arg1 == 'export' ||
+		$arg1 == 'show'
+	) {
+		PW::init();
+	} else {
+		echo "Unknown command.\n";
 	}
-
-
+} else {
+	PW::showHelp();
 }
 
 function strposAll ($haystack, $needle) {
@@ -68,118 +42,57 @@ class PW {
 	public static function init () {
 		self::$settings = (object) [
 			'code' => null,
-			'data' => null,
 			'key' => null,
 			'dataBool' => false,
-			'status' => null,
-			'managerMode' => ''
 		];
 		self::$settings->code = file_get_contents(__FILE__);
 		self::$settings->dataBool = strlen(self::getDataNeedle('~DATA~'));
 
 		self::toolChecking();
-
-		self::listOptions();
-
-		// echo "\033[38;5;208mee = edit entities\033[0;00m\n";
-		// print_r(self::$settings->data);
-
-	}
-	public static function initOLD () {
-		self::$settings = (object) [
-			'arg' => array(
-				0 => false
-			),
-			'status' => array(
-				0 => false
-			),
-			'code' => '',
-			'key' => '',
-			'data' => null
-		];
 	}
 	public static function toolChecking () {
-		global $strings;
-		$options = '';
-
-		// first check if there is data
-
-
-		system('clear');
-		echo $strings->bar;
-
-		if (self::$settings->dataBool == 0) {
-			echo "Status: \033[38;5;40mWelcome!\033[0;00m\n";
-		}
 		if (self::$settings->key == null) {
-			echo "Status: \033[38;5;40mNo password given\033[0;00m\n\n";
-			PW::$settings->managerMode = 'pw';
 			self::$settings->key = self::getKey();
-			PW::$settings->managerMode = '';
 			PW::toolChecking();
 			return;
 		}
 
-		if (self::$settings->key != null && self::$settings->dataBool == 0) {
-			$data = (object) [
-				'entity' => array(),
-				'type' => array(),
-				'text' => array(),
-				'entity_has_type' => array(),
-				'type_has_text' => array()
-			];
-			$enc = self::encrypt(serialize($data));
-			self::saveData('~DATA~', $enc);
-			self::$settings->dataBool = true;
-		}
+		global $argv;
 
-		if (self::$settings->key != null && self::$settings->dataBool) {
-			self::$settings->data = unserialize(self::decrypt(self::getDataNeedle('~DATA~')));
-			self::$settings->status = 'ready';
-		}
+		if (self::$settings->key != null) {
+			if ($argv[1] == 'import') {
 
-	}
-	public static function listOptions () {
-		$options = '';
-		if (self::$settings->status == 'ready') {
-			$options .= "\033[38;5;208mne = create new entity\033[0;00m\n";
-			$options .= "\033[38;5;208mnt = create new type\033[0;00m\n";
-			$options .= "\033[38;5;208mnx = create new text\033[0;00m\n";
-			$options .= "\033[38;5;208mle = list entities\033[0;00m\n";
+				if (self::$settings->dataBool) {
+					echo "\033[38;5;160mCaution:\033[0;00m \033[38;5;244mThere is already data avaiable. Please make a backup before you procedure. Import stopped\033[0;00m\n";
+					return;
+				}
 
-			echo "What would you like to do?\n";
-			echo $options;
-		}
-	}
-	public static function saveEntityMenu () {
-		global $strings;
-		system('clear');
-		echo $strings->bar;
-		echo "Insert the name of your new entity:\n";
-	}
-	public static function saveEntity ($name) {
-		$entities = self::$settings->data->entity;
-		$pass = true;
-		foreach ($entities as $entity) {
-			if ($entity == $name) {
-				$pass = false;
-				echo "Sorry, this entity is already taken\n";
+				$data = file_get_contents($argv[2]);
+				$enc = self::encrypt(serialize($data));
+				self::saveData('~DATA~', $enc);
+				echo "\033[38;5;40mImport of file {$argv[2]} done\033[0;00m\n";
+				return;
+			} else if ($argv[1] == 'export') {
+				$data = unserialize(self::decrypt(self::getDataNeedle('~DATA~')));
+				self::saveFile($argv[2], $data);
+				echo "\033[38;5;40mExport of file {$argv[2]} done\033[0;00m\n";
+				return;
+			} else if ($argv[1] == 'show') {
+				$data = unserialize(self::decrypt(self::getDataNeedle('~DATA~')));
+				echo $data;
+				echo "\n";
+				echo "\033[38;5;244mIf nothing was shown, it might be that you didn't use the correspondig master password\033[0;00m\n";
 				return;
 			}
 		}
-		if ($pass) {
-			self::$settings->data->entity[] = $name;
-			$enc = self::encrypt(serialize(self::$settings->data));
-			self::saveData('~DATA~', $enc);
-			echo "A new entity {$name} has been created\n";
-			PW::$settings->managerMode = '';
-		}
+
 	}
-	public static function listEntities () {
-		$entities = self::$settings->data->entity;
-		foreach ($entities as $entity) {
-			echo "{$entity}\n";
-		}
+	public static function showHelp () {
+		echo "\033[38;5;244m- type \033[0;00m\033[38;5;208mphp pw.php export choosename.choosetype\033[0;00m\033[38;5;244m in order to export the encrypted data into a file\033[0;00m\n";
+		echo "\033[38;5;244m- type \033[0;00m\033[38;5;208mphp pw.php import choosename.choosetype\033[0;00m\033[38;5;244m in order to import the content of a file and encrypt it\033[0;00m\n";
+		echo "\033[38;5;244m- type \033[0;00m\033[38;5;208mphp pw.php show\033[0;00m\033[38;5;244m in order to show the decrypted content\033[0;00m\n";
+		// echo "\033[38;5;244m- you may adjust settings in pw.php in the init() function\033[0;00m\n";
+		echo "\033[38;5;244m- slashes for file access aren't working at the moment, so all files should be in the same directory\033[0;00m\n";
 	}
 	private static function getDataNeedle ($needle) {
 		$data = array();
@@ -251,11 +164,3 @@ class PW {
 		fclose($file);
 	}
 }
-
-
-// TODO
-// remove hashed key from this file
-
-// save pw here. use password as key
-// http://stackoverflow.com/questions/4081403/how-does-password-based-encryption-technically-work
-// hi = 4a7766245aa3b30393c90480684d58f3e0c7ecb81ebd7b791a11082e70a280623999ddb2f5e18fb45bde4fc368d0eade83544155290f281d837345c49ae09d36826e0779579789d9ae343ddbbf779c5340a8cdef7a8243ae942be4adce3709b26e8127424fb5a5909d6619ab7c218e8ae3433eda1e56763ddf8529384c33dd0
