@@ -71,18 +71,28 @@ class PW {
 				$enc = self::encrypt(serialize($data));
 				self::saveData('~DATA~', $enc);
 				echo "\033[38;5;40mImport of file {$argv[2]} done\033[0;00m\n";
-				return;
+
 			} else if ($argv[1] == 'export') {
+
+				if (!self::$settings->dataBool) {
+					echo "\033[38;5;244mThere is no data avaiable for export.\033[0;00m\n";
+					return;
+				}
+
+				if (file_exists($argv[2])) {
+					echo "\033[38;5;160mCaution:\033[0;00m \033[38;5;244mThere is already a file with the name {$argv[2]} avaiable\033[0;00m\n";
+					return;
+				}
+
 				$data = unserialize(self::decrypt(self::getDataNeedle('~DATA~')));
 				self::saveFile($argv[2], $data);
 				echo "\033[38;5;40mExport of file {$argv[2]} done\033[0;00m\n";
-				return;
+
 			} else if ($argv[1] == 'show') {
 				$data = unserialize(self::decrypt(self::getDataNeedle('~DATA~')));
 				echo $data;
 				echo "\n";
 				echo "\033[38;5;244mIf nothing was shown, it might be that you didn't use the correspondig master password\033[0;00m\n";
-				return;
 			}
 		}
 
@@ -114,6 +124,7 @@ class PW {
 		system('stty echo'); // show characters in terminal again
 
 		// http://php.net/manual/en/function.hash-pbkdf2.php
+		// http://stackoverflow.com/questions/4081403/how-does-password-based-encryption-technically-work
 		$iterations = 1000;
 		$hashLength = 255;
 		$hash = hash_pbkdf2("sha256", $password, '', $iterations, $hashLength); // using without salt
